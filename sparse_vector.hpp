@@ -43,6 +43,7 @@
 
 #include <type_traits>
 #include <exception>
+#include <initializer_list>
 
 namespace sv {
     namespace details {
@@ -111,7 +112,7 @@ namespace sv {
                 if (!data_[i].exist) {
                     newData[i].exist = false;
                 } else {
-                    details::move_place<T>(newData[i].value, data_[i].value);
+                    details::move_place<value_type>(newData[i].value, data_[i].value);
                     newData[i].exist = true;
                 }
             }
@@ -130,17 +131,28 @@ namespace sv {
         sparse_vector(const sparse_vector& other) : size_(other.size_), capacity_(other.capacity_), allocator_(other.allocator_), freeIndeces_(other.freeIndeces_) {
             data_ = allocator_.allocate(capacity_);
             for (size_type i = 0; i < size_; ++i) {
-                if (!other.data_[i].exist) {
-                    data_[i].exist = false;
+                value_info& cell = data_[i];
+                value_info& otherCell = other.data_[i];
+
+                if (!otherCell.exist) {
+                    cell.exist = false;
                 } else {
-                    new(&data_[i].value)value_type(other.data_[i].value);
-                    data_[i].exist = true;
+                    new(&cell.value)value_type(otherCell.value);
+                    cell.exist = true;
                 }
             }
         }
         sparse_vector(sparse_vector&& other) : data_(other.data_), size_(other.size_), capacity_(other.capacity_), allocator_(SPARSE_VECTOR_MOVE(other.allocator_)), freeIndeces_(SPARSE_VECTOR_MOVE(other.freeIndeces_)) {
             other.data_ = nullptr;
             other.size_ = 0;
+        }
+        sparse_vector(std::initializer_list<value_type> other) : data_(nullptr), size_(other.size()), capacity_(other.size()), allocator_(), freeIndeces_() {
+            data_ = allocator_.allocate(capacity_);
+            for (size_type i = 0; i < size_; ++i) {
+                value_info& cell = data_[i];
+                new(&cell.value)value_type(*(other.begin() + i));
+                cell.exist =  true;
+            }
         }
 
         public:
@@ -229,21 +241,24 @@ namespace sv {
             }
             size_ = newSize;
         }
-        size_type size() const noexcept {
+        [[nodiscard]] size_type size() const noexcept {
             return size_;
         }
-        size_type capacity() const noexcept {
+        [[nodiscard]] size_type capacity() const noexcept {
             return capacity_;
+        }
+        [[nodiscard]] const stack_type& get_free_cells() const noexcept {
+            return freeIndeces_;
         }
 
         public:
-        referens operator[](size_type i) {
+        [[nodiscard]] referens operator[](size_type i) {
             return data_[i].value;
         }
-        const_referens operator[](size_type i) const {
+        [[nodiscard]] const_referens operator[](size_type i) const {
             return data_[i].value;
         }
-        referens at(size_type i) {
+        [[nodiscard]] referens at(size_type i) {
             if (size_ <= i)
                 throw std::out_of_range("sparse_vector is empty on at.");
             value_info& cell = data_[i];
@@ -251,7 +266,7 @@ namespace sv {
                 throw std::out_of_range("value doesnt exist in sparse_vector on this index. at.");
             return data_[i].value;
         }
-        const_referens at(size_type i) const {
+        [[nodiscard]] const_referens at(size_type i) const {
             if (size_ <= i)
                 throw std::out_of_range("sparse_vector is empty on at.");
             value_info& cell = data_[i];
