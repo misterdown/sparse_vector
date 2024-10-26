@@ -26,9 +26,9 @@
 #ifndef SPARSE_VECTOR_HPP_
 #define SPARSE_VECTPR_HPP_ 1
 
-#ifndef SPARSE_VECTOR_DEFAULT_STACK
-#   include <stack>
-#   define SPARSE_VECTOR_DEFAULT_STACK std::stack
+#ifndef SPARSE_VECTOR_DEFAULT_CONTAINER
+#   include <vector>
+#   define SPARSE_VECTOR_DEFAULT_CONTAINER std::vector
 #endif
 
 #ifndef SPARSE_VECTOR_SIZE_TYPE
@@ -62,7 +62,7 @@ namespace sv {
 
     template <  class T,
                 class AllocatorT = std::allocator<T>,
-                template <class...> class StackT = SPARSE_VECTOR_DEFAULT_STACK>
+                template <class...> class ContainerT = SPARSE_VECTOR_DEFAULT_CONTAINER>
     class sparse_vector {
         public:
         typedef T value_type;
@@ -81,7 +81,7 @@ namespace sv {
         };
 
         private:
-        typedef StackT<SPARSE_VECTOR_SIZE_TYPE> stack_type;
+        typedef ContainerT<SPARSE_VECTOR_SIZE_TYPE> container_type;
 
         public:
         typedef typename AllocatorT::rebind<value_info>::other allocator_type;
@@ -92,7 +92,7 @@ namespace sv {
         size_type size_;
         size_type capacity_;
         allocator_type allocator_;
-        stack_type freeIndeces_;
+        container_type freeIndeces_;
 
         private:
         
@@ -119,6 +119,10 @@ namespace sv {
             allocator_.deallocate(data_, capacity_);
             data_ = newData;
             capacity_ = newCapacity;
+        }
+        void mark_as_free(size_type i) {
+            data_[i].exist = false;
+            freeIndeces_.push_back(i);
         }
 
         public:
@@ -176,8 +180,8 @@ namespace sv {
                 index = size_;
                 ++size_;
             } else {
-                index = freeIndeces_.top();
-                freeIndeces_.pop();
+                index = freeIndeces_.back();
+                freeIndeces_.pop_back();
             }
 
             value_info& cell = data_[index];
@@ -194,8 +198,8 @@ namespace sv {
                 index = size_;
                 ++size_;
             } else {
-                index = freeIndeces_.top();
-                freeIndeces_.pop();
+                index = freeIndeces_.back();
+                freeIndeces_.pop_back();
             }
 
             value_info& cell = data_[index];
@@ -206,19 +210,17 @@ namespace sv {
         void erase_at(size_type index) {
             if (index > size_)
                 throw std::out_of_range("out of sparse_vector range on erase_at.");
-
             value_info& cell = data_[index];
-            if (cell.exist) {
-                cell.value.~value_type();
-                cell.exist = false;
-                freeIndeces_.push(index);
-            } 
+            if (!cell.exist)
+                throw std::out_of_range("value doesnt exist in sparse_vector on this index. erase_at.");
+            cell.value.~value_type();
+            mark_as_free(index);
         }
         void pop_back() {
             if (size_ == 0)
                 throw std::out_of_range("sparse_vector is empty on pop_back.");
             --size_;
-            value_info& cell = data_[size_];
+            value_info& cell = data_[size_]; // Это НЕЛЬЗЯ ложить в контейнер свободных индексов, ведь размер был изменён
             cell.value.~value_type();
             cell.exist = false;
         }
@@ -231,6 +233,7 @@ namespace sv {
                     cell.exist = true;
                 }
             }
+            freeIndeces_.clear(); // Все значения были заняты, так что свободных индексов больше не существует
         }
         void reserve(size_type newCapacity) {
             if (capacity_ >= newCapacity)
@@ -241,7 +244,7 @@ namespace sv {
         void resize(size_type newSize) {
             reserve(newSize);
             for (size_type i = size_; i < newSize; ++i) {
-                data_[i].exist = false;
+                mark_as_free(i);
             }
             size_ = newSize;
         }
@@ -266,11 +269,12 @@ namespace sv {
         void clear() {
             for (size_type i = 0; i < size_; ++i) {
                 value_info& cell = data_[i];
-                if (cell.exist) {
+                if (cell.exist) { // Сдесь НЕ нужно пополнять freeIndeces_, даже наоборот
                     cell.value.~value_type();
                     cell.exist = false;
                 }
             }
+            freeIndeces_.clear();
             size_ = 0;
         }
         [[nodiscard]] size_type size() const noexcept {
@@ -279,7 +283,7 @@ namespace sv {
         [[nodiscard]] size_type capacity() const noexcept {
             return capacity_;
         }
-        [[nodiscard]] const stack_type& get_free_cells() const noexcept {
+        [[nodiscard]] const container_type& get_free_cells() const noexcept {
             return freeIndeces_;
         }
 
@@ -317,51 +321,46 @@ namespace sv {
             typedef const T* const_pointer;
 
             private:
-            value_info* ptr;
-            const value_info* endPtr; // yeah, weird
+            value_info* ptr_;
+            const value_info* endPtr_; // yeah, weird
 
             public:
-            iterator(value_info* ptr, const value_info* endPtr) noexcept : ptr(ptr), endPtr(endPtr) {
-
+            iterator(value_info* ptr, const value_info* endPtr) noexcept : ptr_(ptr), endPtr_(endPtr) {
+                while ((ptr_ != endPtr_) && !ptr_->exist) {
+                    ++ptr_;
+                }
             }
 
             public:
             [[nodiscard]] pointer operator->() noexcept {
-                return &ptr->value;
+                return &ptr_->value;
             }
             [[nodiscard]] const_pointer operator->() const noexcept {
-                return &ptr->value;
+                return &ptr_->value;
             }
             [[nodiscard]] referens operator*() noexcept {
-                return ptr->value;
+                return ptr_->value;
             }
             [[nodiscard]] const_referens operator*() const noexcept {
-                return ptr->value;
+                return ptr_->value;
             }
             
 
             public:
             iterator& operator++() noexcept {
-                ++ptr;
-                while ((ptr != endPtr) && !ptr->exist) {
-                    ++ptr;
+                ++ptr_;
+                while ((ptr_ != endPtr_) && !ptr_->exist) {
+                    ++ptr_;
                 }
                 return *this;
             }
-            /* iterator& operator++(iterator& iter) const noexcept {
-                ++iter.ptr;
-                while ((iter.ptr != iter.endPtr) && !iter.ptr->exist) {
-                    ++iter.ptr;
-                }
-                return iter;
-            } */
 
             public:
             [[nodiscard]] bool operator==(const iterator& other) const noexcept {
-                return ptr == other.ptr;
+                return ptr_ == other.ptr_;
             }
             [[nodiscard]] bool operator!=(const iterator& other) const noexcept {
-                return ptr != other.ptr;
+                return ptr_ != other.ptr_;
             }
             
         };
@@ -372,42 +371,38 @@ namespace sv {
             typedef const T* const_pointer;
             
             private:
-            const value_info* ptr;
-            const value_info* endPtr; // yeah, weird
+            const value_info* ptr_;
+            const value_info* endPtr_; // yeah, weird
             
             public:
-            const_iterator(const value_info* ptr, const value_info* endPtr) : ptr(ptr), endPtr(endPtr) {
-
+            const_iterator(const value_info* ptr, const value_info* endPtr) : ptr_(ptr), endPtr_(endPtr) {
+                while ((ptr_ != endPtr_) && !ptr_->exist) {
+                    ++ptr_;
+                }
             }
 
             public:
             [[nodiscard]] const_pointer operator->() const noexcept {
-                return &ptr->value;
+                return &ptr_->value;
             }
             [[nodiscard]] const_referens operator*() const noexcept {
-                return ptr->value;
+                return ptr_->value;
             }
 
             public:
             const_referens& operator++() noexcept {
-                ++ptr;
-                while ((ptr != endPtr) && !ptr->exist) {
-                    ++ptr;
+                ++ptr_;
+                while ((ptr_ != endPtr_) && !ptr_->exist) {
+                    ++ptr_;
                 }
                 return *this;
             }
-            /* const_referens& operator++(const_referens& iter) noexcept {
-                ++iter.ptr;
-                while ((iter.ptr != iter.endPtr) && !iter.ptr->exist) {
-                    ++iter.ptr;
-                }
-                return iter;
-            } */
+
             [[nodiscard]] bool operator==(const const_referens& other) const noexcept {
-                return ptr == other.ptr;
+                return ptr_ == other.ptr_;
             }
             [[nodiscard]] bool operator!=(const const_referens& other) const noexcept {
-                return ptr != other.ptr;
+                return ptr_ != other.ptr_;
             }
             
         };
