@@ -168,36 +168,40 @@ namespace sv {
         }
 
         public:
-        void push_free(const_referens val) {
+        size_type push_free(const_referens val) {
+            size_type index;
             if (freeIndeces_.empty()) {
                 if (size_ == capacity_)
                     reallocate(capacity_ * 2);
-                auto& cell = data_[size_];
-                new(&cell.value)value_type(val);
-                cell.exist = true;
+                index = size_;
                 ++size_;
             } else {
-                auto& cell = data_[freeIndeces_.top()];
-                new(&cell.value)value_type(val);
-                cell.exist = true;
+                index = freeIndeces_.top();
                 freeIndeces_.pop();
             }
+
+            value_info& cell = data_[index];
+            new(&cell.value)value_type(val);
+            cell.exist = true;
+            return index;
         }
         template<class... ArgsT>
-        void emplace_free(ArgsT&&... args) {
+        size_type emplace_free(ArgsT&&... args) {
+            size_type index;
             if (freeIndeces_.empty()) {
                 if (size_ == capacity_)
                     reallocate(capacity_ * 2);
-                value_info& cell = data_[size_];
-                new(&cell.value)value_type(std::forward<ArgsT>(args)...);
-                cell.exist = true;
+                index = size_;
                 ++size_;
             } else {
-                value_info& cell = data_[freeIndeces_.top()];
-                new(&cell.value)value_type(std::forward<ArgsT>(args)...);
-                cell.exist = true;
+                index = freeIndeces_.top();
                 freeIndeces_.pop();
             }
+
+            value_info& cell = data_[index];
+            new(&cell.value)value_type(std::forward<ArgsT>(args)...);
+            cell.exist = true;
+            return index;
         }
         void erase_at(size_type index) {
             if (index > size_)
@@ -241,6 +245,34 @@ namespace sv {
             }
             size_ = newSize;
         }
+        [[nodiscard]] bool exist_at(size_type i) const noexcept {
+            if (size_ <= i)
+                return false;
+            value_info& cell = data_[i];
+            if (!cell.exist)
+                return false;
+            return true;
+        }
+        template<class... ArgsT>
+        void emplace_at(size_type i, ArgsT&&... args) {
+            if (size_ <= i)
+                throw std::out_of_range("index out of sparse_vector size on put_at.");
+            value_info& cell = data_[i];
+            if (!cell.exist)
+                throw std::out_of_range("value already exist in sparse_vector on this index. put_at.");
+            new(&cell.value)value_type(std::forward<ArgsT>(args)...);
+            cell.exist = true;
+        }
+        void clear() {
+            for (size_type i = 0; i < size_; ++i) {
+                value_info& cell = data_[i];
+                if (cell.exist) {
+                    cell.value.~value_type();
+                    cell.exist = false;
+                }
+            }
+            size_ = 0;
+        }
         [[nodiscard]] size_type size() const noexcept {
             return size_;
         }
@@ -260,7 +292,7 @@ namespace sv {
         }
         [[nodiscard]] referens at(size_type i) {
             if (size_ <= i)
-                throw std::out_of_range("sparse_vector is empty on at.");
+                throw std::out_of_range("index out of sparse_vector size on at.");
             value_info& cell = data_[i];
             if (!cell.exist)
                 throw std::out_of_range("value doesnt exist in sparse_vector on this index. at.");
@@ -268,7 +300,7 @@ namespace sv {
         }
         [[nodiscard]] const_referens at(size_type i) const {
             if (size_ <= i)
-                throw std::out_of_range("sparse_vector is empty on at.");
+                throw std::out_of_range("index out of sparse_vector size on at.");
             value_info& cell = data_[i];
             if (!cell.exist)
                 throw std::out_of_range("value doesnt exist in sparse_vector on this index. at.");
