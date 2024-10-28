@@ -390,7 +390,7 @@ namespace sv {
             }
 
             public:
-            const_referens& operator++() noexcept {
+            const_iterator& operator++() noexcept {
                 ++ptr_;
                 while ((ptr_ != endPtr_) && !ptr_->exist) {
                     ++ptr_;
