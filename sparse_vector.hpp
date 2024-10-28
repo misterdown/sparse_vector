@@ -398,10 +398,10 @@ namespace sv {
                 return *this;
             }
 
-            [[nodiscard]] bool operator==(const const_referens& other) const noexcept {
+            [[nodiscard]] bool operator==(const const_iterator& other) const noexcept {
                 return ptr_ == other.ptr_;
             }
-            [[nodiscard]] bool operator!=(const const_referens& other) const noexcept {
+            [[nodiscard]] bool operator!=(const const_iterator& other) const noexcept {
                 return ptr_ != other.ptr_;
             }
             
