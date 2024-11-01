@@ -155,7 +155,7 @@ namespace sv {
             for (size_type i = 0; i < size_; ++i) {
                 value_info& cell = data_[i];
                 new(&cell.value)value_type(*(other.begin() + i));
-                cell.exist =  true;
+                cell.exist = true;
             }
         }
 
@@ -175,7 +175,7 @@ namespace sv {
         size_type push_free(const_referens val) {
             size_type index;
             if (freeIndeces_.empty()) {
-                if (size_ == capacity_)
+                if (size_ >= capacity_)
                     reallocate(capacity_ * 2);
                 index = size_;
                 ++size_;
@@ -193,7 +193,7 @@ namespace sv {
         size_type emplace_free(ArgsT&&... args) {
             size_type index;
             if (freeIndeces_.empty()) {
-                if (size_ == capacity_)
+                if (size_ >= capacity_)
                     reallocate(capacity_ * 2);
                 index = size_;
                 ++size_;
@@ -259,10 +259,10 @@ namespace sv {
         template<class... ArgsT>
         void emplace_at(size_type i, ArgsT&&... args) {
             if (size_ <= i)
-                throw std::out_of_range("index out of sparse_vector size on put_at.");
+                throw std::out_of_range("index out of sparse_vector size on emplace_at.");
             value_info& cell = data_[i];
-            if (!cell.exist)
-                throw std::out_of_range("value already exist in sparse_vector on this index. put_at.");
+            if (cell.exist)
+                throw std::out_of_range("value already exist in sparse_vector on this index. emplace_at.");
             new(&cell.value)value_type(std::forward<ArgsT>(args)...);
             cell.exist = true;
         }
@@ -398,6 +398,7 @@ namespace sv {
                 return *this;
             }
 
+            public:
             [[nodiscard]] bool operator==(const const_iterator& other) const noexcept {
                 return ptr_ == other.ptr_;
             }
@@ -406,6 +407,7 @@ namespace sv {
             }
             
         };
+        
 
         public:
         [[nodiscard]] iterator begin() noexcept {
@@ -420,8 +422,12 @@ namespace sv {
         [[nodiscard]] const_iterator end() const noexcept {
             return const_iterator(data_ + size_, data_ + size_);
         }
-        
+        [[nodiscard]] size_type index_of(const iterator& i) const noexcept {
+            return static_cast<size_type>(static_cast<ptrdiff_t>(i.ptr_ - data_));
+        }
+        [[nodiscard]] size_type index_of(const const_iterator& i) const noexcept {
+            return static_cast<size_type>(static_cast<ptrdiff_t>(i.ptr_ - data_));
+        }
     };
 };
-
 #endif
