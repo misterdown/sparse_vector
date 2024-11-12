@@ -82,10 +82,15 @@ namespace sv {
 
         private:
         typedef ContainerT<SPARSE_VECTOR_SIZE_TYPE> container_type;
-
         public:
+
+#if ((defined __cplusplus) && (__cplusplus >= 202002L)) 
+        typedef std::allocator_traits<AllocatorT>::template rebind_traits<value_info> allocator_traits;
+        typedef std::allocator_traits<AllocatorT>::template rebind_alloc<value_info> allocator_type;
+#else
         typedef typename AllocatorT::rebind<value_info>::other allocator_type;
         typedef std::allocator_traits<allocator_type> allocator_traits;
+#endif
 
         private:
         typename allocator_traits::pointer data_;
@@ -121,8 +126,8 @@ namespace sv {
             capacity_ = newCapacity;
         }
         void mark_as_free(size_type i) {
-            data_[i].exist = false;
             freeIndeces_.push_back(i);
+            data_[i].exist = false;
         }
 
         public:
@@ -367,8 +372,8 @@ namespace sv {
         struct const_iterator {
             public:
             typedef T value_type;
-            typedef const T& const_referens;
-            typedef const T* const_pointer;
+            typedef const value_type& const_referens;
+            typedef const value_type* const_pointer;
             
             private:
             const value_info* ptr_;
@@ -411,16 +416,16 @@ namespace sv {
 
         public:
         [[nodiscard]] iterator begin() noexcept {
-            return iterator(data_, data_ + size_);
+            return iterator(&data_[0], &data_[size_]);
         }
         [[nodiscard]] iterator end() noexcept {
-            return iterator(data_ + size_, data_ + size_);
+            return iterator(&data_[size_], &data_[size_]);
         }
         [[nodiscard]] const_iterator begin() const noexcept {
-            return const_iterator(data_, data_ + size_);
+            return const_iterator(&data_[0], &data_[size_]);
         }
         [[nodiscard]] const_iterator end() const noexcept {
-            return const_iterator(data_ + size_, data_ + size_);
+            return const_iterator(&data_[size_], &data_[size_]);
         }
         [[nodiscard]] size_type index_of(const iterator& i) const noexcept {
             return static_cast<size_type>(static_cast<ptrdiff_t>(i.ptr_ - data_));
